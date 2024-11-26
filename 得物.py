@@ -1,9 +1,21 @@
-
 # !/usr/bin/python3
 # -*- coding: utf-8 -*-
+# @Time    : 2023/7/6 12:24
+# @Author  : ziyou
+# -------------------------------
 # cron "1 8,10,12,15,18,22 * * *" script-path=xxx.py,tag=匹配cron用
 # const $ = new Env('得物森林')
+# 抓包 https://app.dewu.com/hacking-tree/v1/user/init 获取 sk x_auth_token user_agent
 # 得物森林
+# export dewu_x_auth_token='Bearer ey**&Bearer ey**',多账号使用换行或&
+# export dewu_sk='9MFyPaKgdQl*********&9MFyPaKgdQl*********' 多账号使用换行或& 一个账号对应一个sk，顺序需与dewu_x_auth_token相同，相同的sk不同账号使用会出验证码，同一设备sk相同，建议一个设备登一个账号抓包
+# export dewu_user_agent='*****pp/5.25.0******&*****pp/5.25.0******' 多账号使用换行或&  同一 sk 对应的 user_agent，其中需含有得物版本号 版本号推荐不小于 5.24.5
+# user_agent示例： Mozilla/5.0 (Linux; U; Android 10; zh-cn; Mi 10 Pro Build/QKQ1.191117.002) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/77.0.3865.120 MQQBrowser/11.0 Mobile Safari/537.36 COVC/045429 Mobile Safari/537.36/duapp/5.24.5(android;13)
+# user_agent示例： DUApp/5.25.0 (com.siwuai.duapp; build:5.25.0.120; iOS 15.6.0) Alamofire/5.3.0
+# 如需关闭助力功能设置 export dewu_help_signal='False'
+# 青龙拉取命令 ql raw https://raw.githubusercontent.com/q7q7q7q7q7q7q7/ziyou/main/得物森林.py
+# 第一个账号助力作者，其余账号依ck顺序助力
+# https://t.me/q7q7q7q7q7q7q7_ziyou
 
 
 import os
@@ -11,16 +23,17 @@ import random
 import re
 import sys
 import time
-import requests
 from urllib.parse import urlparse, parse_qs
+
+import requests
 
 ck_list = []
 share_code_list = []
-share_code_list = []
+author_share_code_list = []
 HELP_SIGNAL = 'True'
-SK = ''
-USER_AGENT = ''
-__version__ = '2.1.2'
+sk_list = []
+user_agent_list = []
+__version__ = '1.0.4'
 all_print_list = []  # 用于记录所有 myprint 输出的字符串
 
 
@@ -55,8 +68,8 @@ def send_notification_message(title):
 def get_env():
     global ck_list
     global HELP_SIGNAL
-    global SK
-    global USER_AGENT
+    global sk_list
+    global user_agent_list
     env_str = os.getenv("dewu_x_auth_token")
     if env_str:
         ck_list += env_str.replace("&", "\n").split("\n")
@@ -65,20 +78,20 @@ def get_env():
         HELP_SIGNAL = env_str
     env_str = os.getenv("dewu_sk")
     if env_str:
-        SK = env_str.strip()
+        sk_list = env_str.replace("&", "\n").split("\n")
     env_str = os.getenv("dewu_user_agent")
     if env_str:
-        USER_AGENT = env_str.strip()
+        user_agent_list = env_str.replace("&", "\n").split("\n")
 
 
-def get_version():
+def get_version_from_github():
     latest_version = '获取失败'
-    username = "dewu"
+    username = "q7q7q7q7q7q7q7"
     repo = "ziyou"
     filepath = "得物森林.py"
     url_list = [
         f'https://raw.fgit.cf/{username}/{repo}/main/{filepath}',
-        f"https://{username}/{repo}/main/{filepath}",
+        f"https://ghproxy.com/https://raw.githubusercontent.com/{username}/{repo}/main/{filepath}",
     ]
     for url in url_list:
         try:
@@ -98,7 +111,18 @@ def get_version():
             flush=True)
 
 
-
+# 下载作者的助力码
+def download_author_share_code():
+    global author_share_code_list
+    try:
+        response = requests.get('https://netcut.cn/p/d3436822ba03c0c3')
+        _list = re.findall(r'"note_content":"(.*?)"', response.text)
+        if _list:
+            share_code_list = _list[0].split(r'\n')
+            author_share_code_list += share_code_list
+    except Exception as e:
+        if e:
+            pass
 
 
 # 获得url params 中键为key的值
@@ -120,12 +144,15 @@ class DeWu:
         self.waterting_g = waterting_g  # 每次浇水克数
         self.remaining_g = remaining_g  # 最后浇水剩余不超过的克数
         self.session = requests.Session()
-        app_version = re.findall(r'pp/([0-9]+\.[0-9]+\.[0-9]+)', USER_AGENT)[0]
+        pattern = r'pp/([0-9]+\.[0-9]+\.[0-9]+)'
+        user_agent = user_agent_list[index]
+        app_version = re.findall(pattern, user_agent)[0]
+        sk = sk_list[index]
         self.headers = {'appVersion': app_version,
-                        'User-Agent': USER_AGENT,
+                        'User-Agent': user_agent,
                         'x-auth-token': x_auth_token,
                         'uuid': '0000000000000000',
-                        'SK': SK, }
+                        'SK': sk, }
         self.tree_id = 0  # 树的id
         self.tasks_completed_number = 0  # 任务完成数
         self.cumulative_tasks_list = []  # 累计计任务列表
@@ -164,7 +191,7 @@ class DeWu:
         if response_dict.get('code') == 200:
             myprint(f"签到成功！")
             return
-        myprint(f"签到失败！{response_dict.get('msg')}")
+        myprint(f"签到失败！ {response_dict.get('msg')}")
 
     # 水滴7天签到
     def droplet_check_in(self):
@@ -176,7 +203,7 @@ class DeWu:
             # 暂时设置，看看礼盒是什么先
             myprint(f"签到成功,获得{response_dict.get('data').get('Num')}g水滴")
             return
-        myprint(f"签到失败！{response_dict.get('msg')}")
+        myprint(f"签到失败！ {response_dict.get('msg')}")
 
     # 领取气泡水滴
     def receive_droplet_extra(self):
@@ -630,7 +657,7 @@ class DeWu:
                         self.receive_task_reward(classify, task_id,
                                                  task_type)  # 领取奖励
                         continue
-            myprint(f'该任务暂时无法处理，请提交日志给作者！{tasks_dict}')
+            myprint(f'该任务暂时无法处理，请提交日志给作者！ {tasks_dict}')
 
     # 执行累计任务
     def execute_cumulative_task(self):
@@ -667,7 +694,7 @@ class DeWu:
                 myprint(
                     f'水滴投资失败，剩余水滴需超过100g，{response_dict.get("msg")}')
                 return
-            myprint(f'水滴投资出错！{response_dict}')
+            myprint(f'水滴投资出错！ {response_dict}')
             return
         else:
             myprint('今日已经水滴投资过了！')
@@ -693,7 +720,7 @@ class DeWu:
             if keyword:
                 myprint(f'获取助力码成功 {keyword[0]}')
                 return keyword[0]
-        myprint(f'获取助力码失败！{response_dict}')
+        myprint(f'获取助力码失败！ {response_dict}')
 
     # 助力
     def help_user(self):
@@ -702,7 +729,7 @@ class DeWu:
             return
         url = 'https://app.dewu.com/hacking-tree/v1/user/init'
         if self.index == 0:
-            for share_code in share_code_list:
+            for share_code in author_share_code_list:
                 _json = {'keyword': share_code}
                 response = self.session.post(url, headers=self.headers,
                                              json=_json)
@@ -759,9 +786,9 @@ class DeWu:
                     myprint(f'获得{droplet}g水滴')
                     # myprint(response_dict)
                     continue
-                myprint(f'领取助力奖励出现未知错误！{response_dict}')
+                myprint(f'领取助力奖励出现未知错误！ {response_dict}')
             return
-        myprint(f'获取助力列表出现未知错误！{response_dict}')
+        myprint(f'获取助力列表出现未知错误！ {response_dict}')
         return
 
     # 领取合种上线奖励
@@ -929,8 +956,8 @@ class DeWu:
         self.click_product()
         myprint(f'{character}开始领取品牌特惠奖励')
         self.receive_brand_specials()
-        myprint(f'{character}开始进行助力')
-        self.help_user()
+        # myprint(f'{character}开始进行助力')
+        # self.help_user()
         myprint(f'{character}开始领取助力奖励')
         self.receive_help_reward()
         myprint(f'{character}开始领取等级奖励')
@@ -944,33 +971,48 @@ class DeWu:
 
 # 主程序
 def main():
-    get_version()
+    global ck_list
+    global sk_list
+    global user_agent_list
+
+    get_version_from_github()
     get_env()
+    ck_list = [x for x in ck_list if x.strip() != ""]
+    sk_list = [x for x in sk_list if x.strip() != ""]
+    user_agent_list = [x for x in user_agent_list if x.strip() != ""]
     if not ck_list:
         myprint('没有获取到账号！')
         return
-    if not SK:
+    if not sk_list:
         myprint('dewu_sk 未填写！')
         return
-    if not USER_AGENT:
+    if not user_agent_list:
         myprint('dewu_user_agent 未填写！')
         return
-    _list = re.findall(r'pp/([0-9]+\.[0-9]+\.[0-9]+)', USER_AGENT)
-    if not _list:
-        myprint('dewu_user_agent 中无法匹配到得物app版本号，重新抓个试试吧')
+    ck_count = len(ck_list)
+    sk_count = len(sk_list)
+    user_agent_count = len(user_agent_list)
+    if ck_count != sk_count:
+        print(
+            f'dewu_x_auth_token({ck_count}个)与dewu_user_agent({user_agent_count}个)数量不相等')
         return
-    share_code()
-    myprint(f'获取到{len(ck_list)}个账号！')
-    if HELP_SIGNAL == 'True':
-        myprint('开始获取所有账号助力码')
-        for index, ck in enumerate(ck_list):
-            myprint(f'第{index + 1}个账号：', end='')
-            share_code_list.append(DeWu(ck, index).get_share_code())
-            time.sleep(0.5)
+    if ck_count != sk_count:
+        print(
+            f'dewu_x_auth_token({ck_count}个)与dewu_sk({sk_count}个)数量不相等')
+        return
+    myprint(f'获取到{ck_count}个账号！')
+    download_author_share_code()
+    # if HELP_SIGNAL == 'True':
+    #     myprint('开始获取所有账号助力码')
+    #     for index, ck in enumerate(ck_list):
+    #         myprint(f'第{index + 1}个账号：', end='')
+    #         share_code_list.append(DeWu(ck, index).get_share_code())
+    #         time.sleep(0.5)
     for index, ck in enumerate(ck_list):
         myprint(f'*****第{index + 1}个账号*****')
         DeWu(ck, index).main()
         myprint('')
+        time.sleep(5)
     send_notification_message(title='得物森林')  # 发送通知消息
 
 

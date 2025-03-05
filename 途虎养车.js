@@ -1,19 +1,12 @@
 /**
-
-TL库
-QQ频道：https://pd.qq.com/s/672fku8ge
-tg频道：https://t.me/TLtoulu
- * 脚本名称：途虎养车
+ * 脚本名称：途虎养车（修复blackBox by @Sliverkiss）
  * 活动规则：每日签到可获取积分奖励
  * 脚本说明：添加重写进入途虎养车小程序积分页面即可获取 Token，支持多账号，兼容 NE / Node.js 环境。
  * 环境变量：TUHU_TOKEN、TUHU_BLACKBOX / CODESERVER_ADDRESS、CODESERVER_FUN、TUHU_BLACKBOX
-========================================================================================================
-cron: 12 8 * * *
-更新cron
-青龙环境变量：TUHU_TOKEN、TUHU_BLACKBOX  ，可以随便填（ CODESERVER_ADDRESS、CODESERVER_FUN）
-api.tuhu.cn域名下 TUHU_TOKEN不要 Bearer 不要空格  ck比较长 个把月都不会变
-TUHU_BLACKBOX只有7天 
-========================================================================================================
+ * 更新时间：2024-03-20
+ * 脚本作者：@FoKit，修复blackBox参数 by @Sliverkiss
+
+# BoxJs订阅：https://raw.githubusercontent.com/FoKit/Scripts/main/boxjs/fokit.boxjs.json
 
 ------------------ Surge 配置 -----------------
 
@@ -21,7 +14,9 @@ TUHU_BLACKBOX只有7天
 hostname = api.tuhu.cn
 
 [Script]
-途虎养车 = type=cron,cronexp=17 7 * * *,timeout=60,script-path=https://www.tuhu.cn/cn/home/default/FoKit/Scripts/main/scripts/tuhu.js,script-update-interval=0
+途虎养车# = type=http-request,pattern=https:\/\/api\.tuhu\.cn\/User\/GetInternalCenterInfo,requires-body=0,max-size=0,script-path=https://raw.githubusercontent.com/Sliverkiss/GoodNight/master/Script/tuhu.js
+
+途虎养车 = type=cron,cronexp=17 7 * * *,timeout=60,script-path=https://raw.githubusercontent.com/Sliverkiss/GoodNight/master/Script/tuhu.js,script-update-interval=0
 
 ------------------ Loon 配置 ------------------
 
@@ -29,7 +24,9 @@ hostname = api.tuhu.cn
 hostname = api.tuhu.cn
 
 [Script]
-cron "17 7 * * *" script-path=https://www.tuhu.cn/cn/home/default/FoKit/Scripts/main/scripts/tuhu.js,tag = 途虎养车,enable=true
+http-request https:\/\/api\.tuhu\.cn\/User\/GetInternalCenterInfo tag=途虎养车#, script-path=https://raw.githubusercontent.com/Sliverkiss/GoodNight/master/Script/tuhu.js,requires-body=0
+
+cron "17 7 * * *" script-path=https://raw.githubusercontent.com/Sliverkiss/GoodNight/master/Script/tuhu.js,tag = 途虎养车,enable=true
 
 -------------- Quantumult X 配置 --------------
 
@@ -37,9 +34,11 @@ cron "17 7 * * *" script-path=https://www.tuhu.cn/cn/home/default/FoKit/Scripts/
 hostname = api.tuhu.cn
 
 [rewrite_local]
-https:\/\/api\.tuhu\.cn\/User\/GetInternalCenterInfo url script-request-header https://www.tuhu.cn/cn/home/default/FoKit/Scripts/main/scripts/tuhu.js
+https:\/\/api\.tuhu\.cn\/User\/GetInternalCenterInfo url script-request-header https://raw.githubusercontent.com/Sliverkiss/GoodNight/master/Script/tuhu.js
 
 [task_local]
+17 7 * * * https://raw.githubusercontent.com/Sliverkiss/GoodNight/master/Script/tuhu.js, tag=途虎养车, img-url=https://raw.githubusercontent.com/FoKit/Scripts/main/images/tuhu.png, enabled=true
+
 ------------------ Stash 配置 -----------------
 
 cron:
@@ -59,243 +58,237 @@ http:
 
 script-providers:
   途虎养车:
-    url: https://www.tuhu.cn/cn/home/default/FoKit/Scripts/main/scripts/tuhu.js
+    url: https://raw.githubusercontent.com/Sliverkiss/GoodNight/master/Script/tuhu.js
     interval: 86400
 
  */
 
 const $ = new Env('途虎养车');
-// $.is_debug = ($.isNode() ? process.env['IS_DEDUG'] : $.getdata('is_debug')) || 'true';  // 调试模式
-$.is_debug = 'false';  // 调试模式
-//$.token = ($.isNode() ? process.env['TUHU_TOKEN'] : $.getdata('tuhu_token')) || '';  // Token
-//$.blackbox = ($.isNode() ? process.env['TUHU_BLACKBOX'] : $.getdata('tuhu_blackbox')) || 'kMPSQ1710898198mf9JVT5oKB5';  // blackbox
-//$.tokenArr = $.toObj($.token) || [];
-let token = ($.isNode() ? process.env['TUHU_TOKEN'] : $.getdata('tuhu_token')) || '', tokenArr = []; // Token
-let blackbox = ($.isNode() ? process.env['TUHU_BLACKBOX'] : $.getdata('tuhu_blackbox')) || '', blackboxArr = []; // blackbox
-
+$.is_debug = ($.isNode() ? process.env['IS_DEDUG'] : $.getdata('is_debug')) || 'false';  // 调试模式
+$.token = ($.isNode() ? process.env['TUHU_TOKEN'] : $.getdata('tuhu_token')) || '';  // Token
+$.blackbox = ($.isNode() ? process.env['TUHU_BLACKBOX'] : $.getdata('tuhu_blackbox')) || 'kMPSQ1710898198mf9JVT5oKB5';  // blackbox
+$.tokenArr = $.toObj($.token) || [];
 $.appid = 'wx27d20205249c56a3';  // 小程序 appId
 $.messages = [];
 
-// 检查变量
-async function checkEnv() {
-  // 多账号分割
-  tokenArr = token.split('@');
-  blackboxArr = blackbox.split('@');
-  
-  // 当下标0为空字符串也会占用长度，所以需判断是否为空字符串
-  if (tokenArr[0]) {
-    console.log(`\n检测到 ${tokenArr.length} 个账号变量\n`);
-    return tokenArr.length;
-  } else {
-    console.log(`\n检测到 0 个账号变量\n`);
-    return 0;
-  }
-}
+
 // 主函数
 async function main() {
-  // 获取微信 Code
-  //await getWxCode();
-  checkEnv();
-  for (let i = 0; i < tokenArr.length; i++) {
-    // 初始化
-    $.token = tokenArr[i];
-    $.blackbox = blackboxArr[i];
-    
-   // $.wx_code = $.codeList[i];
+    // 获取微信 Code
+    await getWxCode();
+    for (let i = 0; i < $.codeList.length; i++) {
+        // 初始化
+        $.token = '';
+        $.wx_code = $.codeList[i];
 
-    // 获取 Token
-    //await getToken();
-    // 把新的 Token 添加到 $.tokenArr
-    //$.token && $.tokenArr.push($.token);
-  }
-
-  if (tokenArr.length) {
-   // $.log(`找到 ${$.tokenArr.length} 个 Token 变量 ✅`);
-    for (let i = 0; i < tokenArr.length; i++) {
-      $.log(`----- 账号 [${i + 1}] 开始执行 -----`);
-      // 初始化
-      $.mobile = '';
-      $.nickname = '';
-      $.is_login = true;
-      $.token = tokenArr[i].startsWith('Bearer ') ? tokenArr[i] : 'Bearer ' + tokenArr[i];  // 补充 Bearer
-
-      // 用户信息
-      await whoami();
-
-      if (!$.is_login) continue;  // 无效 token 跳出
-
-      // 每日签到
-      const taskMap = [
-        { "name": "APP ", "url": "" },
-        { "name": "小程序", "url": "?channel=wxapp" }
-      ]
-      for (item of taskMap) {
-        await checkin(item['url'], item['name']);
-      }
-
-      // 用户积分
-      await getIntegral();
+        // 获取 Token
+        await getToken();
+        // 把新的 Token 添加到 $.tokenArr
+        $.token && $.tokenArr.push($.token);
     }
-    $.log(`----- 所有账号执行完成 -----`);
-  } else {
-    throw new Error('未找到 Token 变量 ❌');
-  }
+
+    if ($.tokenArr.length) {
+        $.log(`找到 ${$.tokenArr.length} 个 Token 变量 ✅`);
+        for (let i = 0; i < $.tokenArr.length; i++) {
+            $.log(`----- 账号 [${i + 1}] 开始执行 -----`);
+            // 初始化
+            $.mobile = '';
+            $.nickname = '';
+            $.is_login = true;
+            $.token = $.tokenArr[i].startsWith('Bearer ') ? $.tokenArr[i] : 'Bearer ' + $.tokenArr[i];  // 补充 Bearer
+
+            // 用户信息
+            await whoami();
+
+            if (!$.is_login) continue;  // 无效 token 跳出
+
+            // 每日签到
+            const taskMap = [
+                { "name": "软件", "url": "" },
+                { "name": "微信", "url": "?channel=wxapp" }
+            ]
+            for (item of taskMap) {
+                //生成blackBox参数
+                await getBlackBox();
+                await checkin(item['url'], item['name']);
+            }
+
+            // 用户积分
+            await getIntegral();
+        }
+        $.log(`----- 所有账号执行完成 -----`);
+    } else {
+        throw new Error('未找到 Token 变量 ❌');
+    }
 }
 
 // 获取 Token
 async function getToken() {
-  // 构造请求
-  const options = {
-    url: `https://cl-gateway.tuhu.cn/cl-user-auth-login/login/authSilentSign`,
-    headers: {
-      'Content-Type': 'application/json',
-      'channel': `wechat-miniprogram`
-    },
-    body: $.toStr({
-      channel: "WXAPP",
-      code: $.wx_code
-    })
-  }
+    // 构造请求
+    const options = {
+        url: `https://cl-gateway.tuhu.cn/cl-user-auth-login/login/authSilentSign`,
+        headers: {
+            'Content-Type': 'application/json',
+            'channel': `wechat-miniprogram`
+        },
+        body: $.toStr({
+            channel: "WXAPP",
+            code: $.wx_code
+        })
+    }
 
-  // 发起请求
-  const result = await Request(options)
-  if (result?.code == "10000") {
-    const { mobile, userSession, userId, userName, nickName } = result.data;
-    $.token = userSession;
-    $.log(`✅ 成功获取 Token`);
-  } else {
-    $.log(`❌ 获取 Token 失败: ${$.toStr(result)}`);
-  }
+    // 发起请求
+    const result = await Request(options)
+    if (result?.code == "10000") {
+        const { mobile, userSession, userId, userName, nickName } = result.data;
+        $.token = userSession;
+        $.log(`✅ 成功获取 Token`);
+    } else {
+        $.log(`❌ 获取 Token 失败: ${$.toStr(result)}`);
+    }
 }
 
 
 // 获取用户信息
 async function whoami() {
-  let msg = ''
-  // 构造请求
-  const options = {
-    url: `https://cl-gateway.tuhu.cn/cl-user-info-site/userAccount/getCurrentUserInfo`,
-    headers: {
-      'Authorization': $.token,
-      'authType': 'oauth',
-      'Content-Type': 'application/json'
-    },
-    body: `{}`
-  }
+    let msg = ''
+    // 构造请求
+    const options = {
+        url: `https://cl-gateway.tuhu.cn/cl-user-info-site/userAccount/getCurrentUserInfo`,
+        headers: {
+            'Authorization': $.token,
+            'authType': 'oauth',
+            'Content-Type': 'application/json'
+        },
+        body: `{}`
+    }
 
-  // 发起请求
-  const result = await Request(options);
-  if (result?.code == 10000 && result?.data) {
-    const { nickName, mobile } = result.data;
-    msg += `\n用户: ${nickName}  [${hideSensitiveData(mobile, 3, 4)}]`;
-  } else if (/token无效/.test($.toStr(result))) {
-    $.is_login = false;
-    msg += `${$.toStr(result)} ❌`;
-  } else {
-    $.log($.toStr(result));
-  }
-  $.messages.push(msg), $.log(msg);
+    // 发起请求
+    const result = await Request(options);
+    if (result?.code == 10000 && result?.data) {
+        const { nickName, mobile } = result.data;
+        msg += `\n当前用户: ${nickName}`;
+    } else if (/token无效/.test($.toStr(result))) {
+        $.is_login = false;
+        msg += `${$.toStr(result)} ❌`;
+    } else {
+        $.log($.toStr(result));
+    }
+    $.messages.push(msg), $.log(msg);
 }
 
 
 // 每日签到
 async function checkin(suffix, name) {
-  let msg = '';
-  // 构造请求
-  let opt = {
-    url: `https://api.tuhu.cn/user/UserCheckInVersion1${suffix}`,
-    headers: {
-      'Authorization': $.token,
-      'Content-Type': 'application/json',
-      'blackbox': $.blackbox
+    let msg = '';
+    // 构造请求
+    let opt = {
+        url: `https://api.tuhu.cn/user/UserCheckInVersion1${suffix}`,
+        headers: {
+            'Authorization': $.token,
+            'Content-Type': 'application/json',
+            'blackbox': $.blackbox
+        }
+    };
+
+    var result = await Request(opt);
+    if (result?.Code == 1) {
+        msg += `${name}任务: 签到成功, 积分 +${result.AddIntegral}, 连续签到: ${result.NeedDays}/7天 ✅`;
+    } else {
+        msg += `${name}任务: 签到失败, ${result?.Message || $.toStr(result)}`;
     }
-  };
 
-  var result = await Request(opt);
-  if (result?.Code == 1) {
-    msg += `${name}签到成功, 积分 +${result.AddIntegral}, 连续签到: ${result.NeedDays}/7天 ✅`;
-  } else {
-    msg += `${name}签到失败, ${result?.Message || $.toStr(result)}`;
-  }
-
-  $.messages.push(msg), $.log(msg);
+    $.messages.push(msg), $.log(msg);
 }
 
 // 获取用户积分
 async function getIntegral() {
-  let msg = ''
-  // 构造请求
-  const options = {
-    url: `https://api.tuhu.cn/User/GetPersonalCenterQuantity`,
-    headers: {
-      'Authorization': $.token,
-      'Content-Type': 'application/json'
+    let msg = ''
+    // 构造请求
+    const options = {
+        url: `https://api.tuhu.cn/User/GetPersonalCenterQuantity`,
+        headers: {
+            'Authorization': $.token,
+            'Content-Type': 'application/json'
+        }
     }
-  }
 
-  // 发起请求
-  const result = await Request(options);
-  if (result?.Code == 1) {
-    msg += `当前积分: ${result.IntegralNumber} 分, 可抵现: ${result.IntegralNumber / 100} 元`;
-  } else {
-    msg += `❌ 积分查询失败`;
-  }
-  $.messages.push(msg), $.log(msg);
+    // 发起请求
+    const result = await Request(options);
+    if (result?.Code == 1) {
+        msg += `查询积分: ${result.IntegralNumber} 分, 可抵现: ${result.IntegralNumber / 100} 元`;
+    } else {
+        msg += `❌ 积分查询失败`;
+    }
+    $.messages.push(msg), $.log(msg);
 }
 
 // 脚本执行入口
 if (typeof $request !== `undefined`) {
-  GetCookie();
-  $.done();
+    GetCookie();
+    $.done();
 } else {
-  !(async () => {
-    await main();  // 主函数
-  })()
-    .catch((e) => $.messages.push(e.message || e) && $.logErr(e))
-    .finally(async () => {
-      await sendMsg($.messages.join('\n').trimStart().trimEnd());  // 推送通知
-      $.done();
-    })
+    !(async () => {
+        await main();  // 主函数
+    })()
+        .catch((e) => $.messages.push(e.message || e) && $.logErr(e))
+        .finally(async () => {
+            await sendMsg($.messages.join('\n').trimStart().trimEnd());  // 推送通知
+            $.done();
+        })
 }
 
 
 // 获取签到数据
 function GetCookie() {
-  try {
-    debug($request.headers);
-    const headers = ObjectKeys2LowerCase($request.headers);
-    $.newToken = headers['authorization'];
-    headers['blackbox'] && $.setdata(headers['blackbox'], 'tuhu_blackbox'), $.log(`blackbox: ${headers['blackbox']}`);  // 更新 blackbox
-    if (/User\/GetInternalCenterInfo/.test($request.url) && !new RegExp($.newToken).test($.token)) {
-      $.tokenArr.push($.newToken);
-      $.log(`开始新增用户数据 ${$.newToken}`);
-      $.setdata($.toStr($.tokenArr), 'tuhu_token');
-      $.msg($.name, ``, `Token 获取成功。🎉`);
-    } else {
-      $.log(`无需更新 Token: ${$.newToken}`);
+    try {
+        debug($request.headers);
+        const headers = ObjectKeys2LowerCase($request.headers);
+        $.newToken = headers['authorization'];
+        headers['blackbox'] && $.setdata(headers['blackbox'], 'tuhu_blackbox'), $.log(`blackbox: ${headers['blackbox']}`);  // 更新 blackbox
+        if (/User\/GetInternalCenterInfo/.test($request.url) && !new RegExp($.newToken).test($.token)) {
+            $.tokenArr.push($.newToken);
+            $.log(`开始新增用户数据 ${$.newToken}`);
+            $.setdata($.toStr($.tokenArr), 'tuhu_token');
+            $.msg($.name, ``, `Token 获取成功。🎉`);
+        } else {
+            $.log(`无需更新 Token: ${$.newToken}`);
+        }
+    } catch (e) {
+        $.log("❌ 签到数据获取失败"), $.log(e);
     }
-  } catch (e) {
-    $.log("❌ 签到数据获取失败"), $.log(e);
-  }
+}
+
+async function getBlackBox() {
+    try {
+        const options = {
+            url: `https://tuhu.xn--ug8h.eu.org/blackbox`,
+        }
+        // 发起请求
+        const result = await Request(options);
+        $.blackbox = result?.blackBox;
+    } catch (e) {
+        $.log("❌ blackBox获取失败"), $.log(e);
+    }
 }
 
 
 // 获取微信 Code
 async function getWxCode() {
-  try {
-    $.codeList = [];
-    $.codeServer = ($.isNode() ? process.env["CODESERVER_ADDRESS"] : $.getdata("@codeServer.address")) || '';
-    $.codeFuc = ($.isNode() ? process.env["CODESERVER_FUN"] : $.getdata("@codeServer.fun")) || '';
-    if (!$.codeServer) return $.log(`⚠️ 未配置微信 Code Server。`);
+    try {
+        $.codeList = [];
+        $.codeServer = ($.isNode() ? process.env["CODESERVER_ADDRESS"] : $.getdata("@codeServer.address")) || '';
+        $.codeFuc = ($.isNode() ? process.env["CODESERVER_FUN"] : $.getdata("@codeServer.fun")) || '';
+        if (!$.codeServer) return $.log(`⚠️ 未配置微信 Code Server。`);
 
-    $.codeList = ($.codeFuc
-      ? (eval($.codeFuc), await WxCode($.appid))
-      : (await Request(`${$.codeServer}/?wxappid=${$.appid}`))?.split("|"))
-      .filter(item => item.length === 32);
-    $.log(`♻️ 获取到 ${$.codeList.length} 个微信 Code:\n${$.codeList}`);
-  } catch (e) {
-    $.logErr(`❌ 获取微信 Code 失败！`);
-  }
+        $.codeList = ($.codeFuc
+            ? (eval($.codeFuc), await WxCode($.appid))
+            : (await Request(`${$.codeServer}/?wxappid=${$.appid}`))?.split("|"))
+            .filter(item => item.length === 32);
+        $.log(`♻️ 获取到 ${$.codeList.length} 个微信 Code:\n${$.codeList}`);
+    } catch (e) {
+        $.logErr(`❌ 获取微信 Code 失败！`);
+    }
 }
 
 
@@ -307,15 +300,15 @@ async function getWxCode() {
  * @returns {string} - 返回字符串
  */
 function hideSensitiveData(string, head_length = 2, foot_length = 2) {
-  try {
-    let star = '';
-    for (var i = 0; i < string.length - head_length - foot_length; i++) {
-      star += '*';
+    try {
+        let star = '';
+        for (var i = 0; i < string.length - head_length - foot_length; i++) {
+            star += '*';
+        }
+        return string.substring(0, head_length) + star + string.substring(string.length - foot_length);
+    } catch (e) {
+        return string;
     }
-    return string.substring(0, head_length) + star + string.substring(string.length - foot_length);
-  } catch (e) {
-    return string;
-  }
 }
 
 
@@ -325,15 +318,15 @@ function hideSensitiveData(string, head_length = 2, foot_length = 2) {
  * @returns {object} 返回转换后的对象
  */
 function ObjectKeys2LowerCase(obj) {
-  const _lower = Object.fromEntries(Object.entries(obj).map(([k, v]) => [k.toLowerCase(), v]))
-  return new Proxy(_lower, {
-    get: function (target, propKey, receiver) {
-      return Reflect.get(target, propKey.toLowerCase(), receiver)
-    },
-    set: function (target, propKey, value, receiver) {
-      return Reflect.set(target, propKey.toLowerCase(), value, receiver)
-    }
-  })
+    const _lower = Object.fromEntries(Object.entries(obj).map(([k, v]) => [k.toLowerCase(), v]))
+    return new Proxy(_lower, {
+        get: function (target, propKey, receiver) {
+            return Reflect.get(target, propKey.toLowerCase(), receiver)
+        },
+        set: function (target, propKey, value, receiver) {
+            return Reflect.set(target, propKey.toLowerCase(), value, receiver)
+        }
+    })
 }
 
 
@@ -343,50 +336,50 @@ function ObjectKeys2LowerCase(obj) {
  * @returns {(object|string)} - 根据 options['respType'] 传入的 {status|headers|rawBody} 返回对象或字符串，默认为 body
  */
 async function Request(options) {
-  try {
-    options = options.url ? options : { url: options };
-    const _method = options?._method || ('body' in options ? 'post' : 'get');
-    const _respType = options?._respType || 'body';
-    const _timeout = options?._timeout || 15e3;
-    const _http = [
-      new Promise((_, reject) => setTimeout(() => reject(`❌ 请求超时：${options['url']}`), _timeout)),
-      new Promise((resolve, reject) => {
-        debug(options, '[Request]');
-        $[_method.toLowerCase()](options, (error, response, data) => {
-          debug(response, '[response]');
-          error && $.log($.toStr(error));
-          if (_respType !== 'all') {
-            resolve($.toObj(response?.[_respType], response?.[_respType]));
-          } else {
-            resolve(response);
-          }
-        })
-      })
-    ];
-    return await Promise.race(_http);
-  } catch (err) {
-    $.logErr(err);
-  }
+    try {
+        options = options.url ? options : { url: options };
+        const _method = options?._method || ('body' in options ? 'post' : 'get');
+        const _respType = options?._respType || 'body';
+        const _timeout = options?._timeout || 15e3;
+        const _http = [
+            new Promise((_, reject) => setTimeout(() => reject(`❌ 请求超时： ${options['url']}`), _timeout)),
+            new Promise((resolve, reject) => {
+                debug(options, '[Request]');
+                $[_method.toLowerCase()](options, (error, response, data) => {
+                    debug(response, '[response]');
+                    error && $.log($.toStr(error));
+                    if (_respType !== 'all') {
+                        resolve($.toObj(response?.[_respType], response?.[_respType]));
+                    } else {
+                        resolve(response);
+                    }
+                })
+            })
+        ];
+        return await Promise.race(_http);
+    } catch (err) {
+        $.logErr(err);
+    }
 }
 
 
 // 发送消息
 async function sendMsg(message) {
-  if (!message) return;
-  try {
-    if ($.isNode()) {
-      try {
-        var notify = require('./sendNotify');
-      } catch (e) {
-        var notify = require('./utils/sendNotify');
-      }
-      await notify.sendNotify($.name, message);
-    } else {
-      $.msg($.name, '', message);
+    if (!message) return;
+    try {
+        if ($.isNode()) {
+            try {
+                var notify = require('./sendNotify');
+            } catch (e) {
+                var notify = require('./utils/sendNotify');
+            }
+            await notify.sendNotify($.name, message);
+        } else {
+            $.msg($.name, '', message);
+        }
+    } catch (e) {
+        $.log(`\n\n----- ${$.name} -----\n${message}`);
     }
-  } catch (e) {
-    $.log(`\n\n----- ${$.name} -----\n${message}`);
-  }
 }
 
 
@@ -396,15 +389,15 @@ async function sendMsg(message) {
  * @param {*} title - 标题
  */
 function debug(content, title = "debug") {
-  let start = `\n----- ${title} -----\n`;
-  let end = `\n----- ${$.time('HH:mm:ss')} -----\n`;
-  if ($.is_debug === 'true') {
-    if (typeof content == "string") {
-      $.log(start + content + end);
-    } else if (typeof content == "object") {
-      $.log(start + $.toStr(content) + end);
+    let start = `\n----- ${title} -----\n`;
+    let end = `\n----- ${$.time('HH:mm:ss')} -----\n`;
+    if ($.is_debug === 'true') {
+        if (typeof content == "string") {
+            $.log(start + content + end);
+        } else if (typeof content == "object") {
+            $.log(start + $.toStr(content) + end);
+        }
     }
-  }
 }
 
 // prettier-ignore
